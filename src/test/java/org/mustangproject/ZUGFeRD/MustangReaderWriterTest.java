@@ -20,11 +20,20 @@ package org.mustangproject.ZUGFeRD;
 
 import junit.framework.Test;
 import junit.framework.TestSuite;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.common.PDMetadata;
+import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
+import org.apache.xmpbox.XMPMetadata;
+import org.apache.xmpbox.schema.PDFAIdentificationSchema;
+import org.apache.xmpbox.xml.DomXmpParser;
+import org.apache.xmpbox.xml.XmpParsingException;
 import org.junit.FixMethodOrder;
 import org.junit.runners.MethodSorters;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -36,22 +45,22 @@ public class MustangReaderWriterTest extends MustangReaderTestCase {
 
 	@Override
 	public Date getDeliveryDate() {
-		return new GregorianCalendar(2017, Calendar.NOVEMBER, 17).getTime();
+		return new GregorianCalendar(2019, Calendar.JUNE, 10).getTime();
 	}
 
 	@Override
 	public Date getDueDate() {
-		return new GregorianCalendar(2017, Calendar.DECEMBER, 9).getTime();
+		return new GregorianCalendar(2019, Calendar.JULY, 1).getTime();
 	}
 
 	@Override
 	public Date getIssueDate() {
-		return new GregorianCalendar(2017, Calendar.NOVEMBER, 18).getTime();
+		return new GregorianCalendar(2019, Calendar.JUNE, 10).getTime();
 	}
 
 	@Override
 	public String getNumber() {
-		return "RE-20171118/506";
+		return "RE-20190610/507";
 	}
 
 	@Override
@@ -112,21 +121,21 @@ public class MustangReaderWriterTest extends MustangReaderTestCase {
 	@Override
 	public IZUGFeRDExportableItem[] getZFItems() {
 		Item[] allItems = new Item[3];
-		Product designProduct = new Product("", "Künstlerische Gestaltung (Stunde): Einer Beispielrechnung", "HUR",
+		Product designProduct = new Product("", "Design (hours): Of a sample invoice", "HUR",
 				new BigDecimal("7.000000"));
-		Product balloonProduct = new Product("", "Luftballon: Bunt, ca. 500ml", "C62", new BigDecimal("19.000000"));
-		Product airProduct = new Product("", "Heiße Luft pro Liter", "LTR", new BigDecimal("19.000000"));
+		Product balloonProduct = new Product("", "Ballons: various colors, ~2000ml", "C62", new BigDecimal("19.000000"));
+		Product airProduct = new Product("", "Hot air „heiße Luft“ (litres)", "LTR", new BigDecimal("19.000000"));
 
 		allItems[0] = new Item(new BigDecimal("160"), new BigDecimal("1"), designProduct);
 		allItems[1] = new Item(new BigDecimal("0.79"), new BigDecimal("400"), balloonProduct);
-		allItems[2] = new Item(new BigDecimal("0.10"), new BigDecimal("200"), airProduct);
+		allItems[2] = new Item(new BigDecimal("0.025"), new BigDecimal("800"), airProduct);
 		return allItems;
 	}
 
 	@Override
 	public String getPaymentTermDescription() {
-		SimpleDateFormat germanDateFormat = new SimpleDateFormat("dd.MM.yyyy");
-		return "Zahlbar ohne Abzug bis zum " + germanDateFormat.format(getDueDate());
+		SimpleDateFormat isoDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+		return "Remit until " + isoDateFormat.format(getDueDate());
 	}
 
 	@Override
@@ -152,7 +161,7 @@ public class MustangReaderWriterTest extends MustangReaderTestCase {
 
 	@Override
 	public String getReferenceNumber() {
-		return "AB32";
+		return "AB321";
 	}
 
 	/**
@@ -294,8 +303,39 @@ public class MustangReaderWriterTest extends MustangReaderTestCase {
 		ZUGFeRDExporter ze = new ZUGFeRDExporterFromA1Factory().setAttachZUGFeRDHeaders(false).load(SOURCE_PDF);
 
 		File tempFile = File.createTempFile("ZUGFeRD-", "-test");
-		ze.export(tempFile.getName());
+		ze.export(tempFile.getAbsolutePath());
 		tempFile.deleteOnExit();
+		checkPdfA3B(tempFile);
+	}
+
+	public void testMigratePDFA1ToA3Stream() throws IOException {
+		// just make sure there is no Exception
+		InputStream SOURCE_PDF = this.getClass()
+				.getResourceAsStream("/MustangGnuaccountingBeispielRE-20171118_506blanko.pdf");
+
+		ZUGFeRDExporter ze = new ZUGFeRDExporterFromA1Factory().setAttachZUGFeRDHeaders(false).load(SOURCE_PDF);
+
+		File tempFile = File.createTempFile("ZUGFeRD-", "-test");
+		tempFile.deleteOnExit();
+		try (FileOutputStream fos = new FileOutputStream(tempFile)) {
+			ze.export(fos);
+		}
+		checkPdfA3B(tempFile);
+	}
+
+	private void checkPdfA3B(File tempFile) throws IOException, InvalidPasswordException {
+		try (PDDocument doc = PDDocument.load(tempFile)) {
+			PDMetadata metadata = doc.getDocumentCatalog().getMetadata();
+			InputStream exportXMPMetadata = metadata.exportXMPMetadata();
+			byte[] xmpBytes = new byte[exportXMPMetadata.available()];
+			exportXMPMetadata.read(xmpBytes);
+			final XMPMetadata xmp = new DomXmpParser().parse(xmpBytes);
+			PDFAIdentificationSchema pdfaid = xmp.getPDFIdentificationSchema();
+			assertEquals(pdfaid.getPart().intValue(), 3);
+			assertEquals(pdfaid.getConformance(), "U");
+		} catch (XmpParsingException e) {
+			throw new IllegalStateException("Failed to read PDF", e);
+		}
 	}
 
 	/**
@@ -312,7 +352,7 @@ public class MustangReaderWriterTest extends MustangReaderTestCase {
 
 		// the writing part
 		try (InputStream SOURCE_PDF = this.getClass()
-				.getResourceAsStream("/MustangGnuaccountingBeispielRE-20171118_506blanko.pdf");
+				.getResourceAsStream("/MustangGnuaccountingBeispielRE-20190610_507blanko.pdf");
 
 			 ZUGFeRDExporter ze = new ZUGFeRDExporterFromA1Factory().setZUGFeRDVersion(2).setZUGFeRDConformanceLevel(ZUGFeRDConformanceLevel.EN16931).load(SOURCE_PDF)) {
 
