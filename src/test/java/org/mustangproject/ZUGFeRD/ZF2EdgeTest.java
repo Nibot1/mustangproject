@@ -1,6 +1,6 @@
 /** **********************************************************************
  *
- * Copyright 2018 Jochen Staerk
+ * Copyright 2019 Jochen Staerk
  *
  * Use is subject to license terms.
  *
@@ -23,6 +23,7 @@ import junit.framework.TestSuite;
 import org.junit.FixMethodOrder;
 import org.junit.runners.MethodSorters;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -32,7 +33,8 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MustangReaderWriterEdgeTest extends MustangReaderTestCase {
+public class ZF2EdgeTest extends MustangReaderTestCase {
+	final String TARGET_PDF = "./target/testout-ZF2newEdge.pdf";
 
 	@Override
 	public Date getDeliveryDate() {
@@ -74,11 +76,10 @@ public class MustangReaderWriterEdgeTest extends MustangReaderTestCase {
 		return "Ecke 12";
 	}
 
-
 	@Override
 	public IZUGFeRDExportableContact getOwnContact() {
 		return new SenderContact();
-		
+
 	}
 
 	@Override
@@ -114,8 +115,10 @@ public class MustangReaderWriterEdgeTest extends MustangReaderTestCase {
 	@Override
 	public IZUGFeRDExportableItem[] getZFItems() {
 		Item[] allItems = new Item[3];
-		Product designProduct = new Product("", "Künstlerische Gestaltung (Stunde): Einer Beispielrechnung", "HUR", new BigDecimal("7.000000"));
-		Product balloonProduct = new Product("", "Luftballon: Bunt, ca. 500ml", "C62", new BigDecimal("19.000000"));
+		Product designProduct = new Product("", "Künstlerische Gestaltung (Stunde): Einer Beispielrechnung", "HUR",
+				new BigDecimal("7.000000"));
+		Product balloonProduct = new Product("", "Bestellerweiterung für E&F Umbau", "C62",
+				new BigDecimal("19.000000"));// test for issue 103
 		Product airProduct = new Product("", "Heiße Luft pro Liter", "LTR", new BigDecimal("19.000000"));
 
 		allItems[0] = new Item(new BigDecimal("160"), new BigDecimal("1"), designProduct);
@@ -155,7 +158,7 @@ public class MustangReaderWriterEdgeTest extends MustangReaderTestCase {
 	 *
 	 * @param testName name of the test case
 	 */
-	public MustangReaderWriterEdgeTest(String testName) {
+	public ZF2EdgeTest(String testName) {
 		super(testName);
 	}
 
@@ -163,60 +166,34 @@ public class MustangReaderWriterEdgeTest extends MustangReaderTestCase {
 	 * @return the suite of tests being tested
 	 */
 	public static Test suite() {
-		return new TestSuite(MustangReaderWriterEdgeTest.class);
+		return new TestSuite(ZF2EdgeTest.class);
 	}
 
-	// //////// TESTS //////////////////////////////////////////////////////////////////////////////////////////
+	// //////// TESTS
+	// //////////////////////////////////////////////////////////////////////////////////////////
 
 	/**
-	 * The importer test imports from ./src/test/MustangGnuaccountingBeispielRE-20170509_505.pdf to check the values.
-	 * As only Name Ascending is supported for Test Unit sequence, I renamed the this test-A-Import to run before
-	 * testZExport
-	 */
-
-	public void testAImport() {
-		InputStream inputStream = this.getClass().getResourceAsStream("/MustangGnuaccountingBeispielRE-20170509_505.pdf");
-		ZUGFeRDImporter zi = new ZUGFeRDImporter(inputStream);
-
-		// Reading ZUGFeRD
-		assertEquals(zi.getAmount(), "571.04");
-		assertEquals(zi.getBIC(), getTradeSettlementPayment()[0].getOwnBIC());
-		assertEquals(zi.getBLZ(), getTradeSettlementPayment()[0].getOwnBLZ());
-		assertEquals(zi.getIBAN(), getTradeSettlementPayment()[0].getOwnIBAN());
-		assertEquals(zi.getKTO(), getTradeSettlementPayment()[0].getOwnKto());
-		assertEquals(zi.getHolder(), getOwnOrganisationName());
-		assertEquals(zi.getDueDate(), "20170530");
-		assertEquals(zi.getForeignReference(), getNumber());
-		assertEquals(zi.getDocumentCode(), "380");
-
-	}
-
-	/**
-	 * The exporter test bases on @{code ./src/test/MustangGnuaccountingBeispielRE-20140703_502blanko.pdf}, adds metadata,
-	 * writes to @{code ./target/testout-*} and then imports to check the values.
-	 * It would not make sense to have it run before the less complex importer test (which is probably redundant).
-	 * As only Name Ascending is supported for Test Unit sequence, I renamed the Exporter Test test-Z-Export
+	 * The exporter test bases on @{code
+	 * ./src/test/MustangGnuaccountingBeispielRE-20170509_505PDFA3.pdf}, adds
+	 * metadata, writes to @{code ./target/testout-*} and then imports to check the
+	 * values.
 	 */
 	public void testEdgeExport() {
 
-		final String TARGET_PDF = "./target/testout-MustangGnuaccountingBeispielRE-20170509_505newEdge.pdf";
 		// the writing part
 
-		try (InputStream SOURCE_PDF =
-					 this.getClass().getResourceAsStream("/MustangGnuaccountingBeispielRE-20170509_505PDFA3.pdf");
+		try (InputStream SOURCE_PDF = this.getClass()
+				.getResourceAsStream("/MustangGnuaccountingBeispielRE-20170509_505PDFA3.pdf");
 
-			 ZUGFeRDExporter ze = new ZUGFeRDExporterFromA3Factory()
-					 .setProducer("My Application")
-					 .setCreator(System.getProperty("user.name"))
-				 	 .setZUGFeRDVersion(1)
-					 .ignorePDFAErrors()
-					 .load(SOURCE_PDF)) {
+				ZUGFeRDExporter ze = new ZUGFeRDExporterFromA3Factory().setProducer("My Application")
+						.setCreator(System.getProperty("user.name")).setZUGFeRDVersion(2).ignorePDFAErrors()
+						.load(SOURCE_PDF)) {
 			ze.PDFattachZugferdFile(this);
 			String theXML = new String(ze.getProvider().getXML());
-			assertTrue(theXML.contains("<rsm:CrossIndustryDocument"));
+			assertTrue(theXML.contains("<rsm:CrossIndustryInvoice"));
 			ze.export(TARGET_PDF);
 		} catch (IOException e) {
-			fail("IOException should not happen in testEdgeExport");
+			fail("IOException should not be raised in testEdgeExport");
 		}
 
 		// now check the contents (like MustangReaderTest)
@@ -225,16 +202,41 @@ public class MustangReaderWriterEdgeTest extends MustangReaderTestCase {
 		// Reading ZUGFeRD
 		assertEquals(zi.getAmount(), "571.04");
 		assertEquals(zi.getBIC(), getTradeSettlementPayment()[0].getOwnBIC());
-		assertEquals(zi.getBLZ(), getTradeSettlementPayment()[0].getOwnBLZ());
 		assertEquals(zi.getIBAN(), getTradeSettlementPayment()[0].getOwnIBAN());
-		assertEquals(zi.getKTO(), getTradeSettlementPayment()[0].getOwnKto());
 		assertEquals(zi.getHolder(), getOwnOrganisationName());
 		assertEquals(zi.getForeignReference(), getNumber());
 		try {
-			assertEquals(zi.getVersion(), 1);
+			assertEquals(zi.getVersion(), 2);
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		}
+		
+	}
+
+	/**
+	 * The exporter test bases on @{code
+	 * ./src/test/MustangGnuaccountingBeispielRE-20170509_505PDFA3.pdf}, adds
+	 * metadata, writes to @{code ./target/testout-*} and then imports to check the
+	 * values.
+	 */
+	public void testOutpuStreamExport() {
+
+		// the writing part
+
+		ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		try (InputStream SOURCE_PDF = this.getClass()
+				.getResourceAsStream("/MustangGnuaccountingBeispielRE-20170509_505PDFA3.pdf");
+
+				ZUGFeRDExporter ze = new ZUGFeRDExporterFromA3Factory().setProducer("My Application")
+						.setCreator(System.getProperty("user.name")).setZUGFeRDVersion(2).ignorePDFAErrors()
+						.load(SOURCE_PDF)) {
+			ze.PDFattachZugferdFile(this);
+			String theXML = new String(ze.getProvider().getXML());
+			assertTrue(theXML.contains("<rsm:CrossIndustryInvoice"));
+			ze.export(bos);
+		} catch (IOException e) {
+			fail("IOException should not be raised in testEdgeExport");
 		}
 
 	}
