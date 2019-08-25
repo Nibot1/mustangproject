@@ -207,7 +207,7 @@ public class ZUGFeRDImporter {
 		return 0;
 	}
 
-	private String extractString(String xpathStr) {
+	public String extractString(String xpathStr) {
 		if (!containsMeta) {
 			throw new ZUGFeRDExportException("No suitable data/ZUGFeRD file could be found.");
 		}
